@@ -1,0 +1,4 @@
+output/
+plots/
+__pycache__/
+.spyderproject
