@@ -17,7 +17,7 @@ def main(argv):
     N = 32
     idi = POINT_ID
     idml = [MTG_ID] 
-    ido = CHCK_ID
+    ido = ABSERRN_ID
     scale = -10
     precision = 0.005
     try:
@@ -65,7 +65,7 @@ def main(argv):
             executionTime = endTime - startTime
             print(" | ", "{:10.15f}".format(executionTime), end="")
             cumulativeTime = cumulativeTime + executionTime  
-            generateOutput(outputSpace, N, ido, plnum, name)
+            generateOutput(outputSpace, precision, N, ido, plnum, name)
 
     print("Total execution time: %s seconds" % (cumulativeTime))
     averageTime = cumulativeTime / n

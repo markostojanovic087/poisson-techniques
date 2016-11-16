@@ -28,6 +28,10 @@ def poissonSolve(inputSpace, idm, N, precision):
         return sorPoissonSolve(inputSpace, N, precision)
     elif idm == MTG_ID:
         return multigridPoissonSolve(inputSpace, N)
+    elif idm == PASS_ID:
+        return passtrough(inputSpace)
+    elif idm == MUL2_ID:
+        return mul2(inputSpace)
     else:
         return inputSpace
 
@@ -69,8 +73,9 @@ def multigridOldPoissonSolve(inputSpace, Np, precision): #Discards imaginary par
 
 def fftPoissonSolve(inputSpace, N):
     print(' | FFT', end="")
+    #print('INPUT= ', inputSpace[][][])
     outputSpace = np.fft.fftn(inputSpace)
-
+    #print('FFT= ', outputSpace)
     h = 1.0 / N    
     w = np.exp(2 * np.pi * 1j / N)
     wi = 1.0
@@ -85,18 +90,21 @@ def fftPoissonSolve(inputSpace, N):
                 denom = wi + 1.0/wi + wj + 1.0/wj + wk + 1.0/wk - 6
                 if not denom == 0:
                     outputSpace[i][j][k] = outputSpace[i][j][k] * h * h / denom
+                    #if outputSpace[i][j][k].real < 0:
+                        #print('** [',i,'][',j,'][',k,']')
                 else:
+                    #print('[',i,'][',j,'][',k,']')
                     processLater.append([i,j,k]) 
                 wk = wk * w
             wj = wj * w
         wi = wi * w                
 
     interpolate(processLater, outputSpace, N)    
-    
+    #print('POISS= ', outputSpace)
     outputSpace = np.fft.ifftn(outputSpace)
-    
+    #print('OUTPUT= ', outputSpace)
     return outputSpace
-
+    
 def iterativePoissonSolve(inputSpace, N, gs, sor, precision):
     print(' |',(('SOR Gauss-Seidel' if sor else 'Gauss-Seidel') if gs else ('SOR Jacobi' if sor else 'Jacobi')), end="")
     w = 1
@@ -162,3 +170,9 @@ def interpolate(processLater, outputSpace, N):
                         csum += outputSpace[n][m][l]
                         
         outputSpace[i][j][k] = csum / cnt
+
+def passtrough(inputspace):
+    return np.array(inputspace)
+    
+def mul2(inputspace):
+    return inputspace*0.25
