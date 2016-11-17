@@ -14,7 +14,6 @@ GRIP_ID     = "gr"
 #Method ids for solving the equation
 FFT_ID      = "fft"     #Fast Fourier transformation
 JCB_ID      = "jcb"     #Jacobi
-SEP_JCB_ID  = "sjcb"    #Jacobi
 GS_ID       = "gs"      #Gauss-Seidel
 SEP_GS_ID   = "sgs"     #Gauss-Seidel
 SOR_ID      = "sor"     #Successive over relaxation

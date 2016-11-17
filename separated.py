@@ -80,45 +80,6 @@ def gsMultiIteration(outputS, inputS, N, h):
                 outputS[i][j][k] = ( outputS[i-1][j][k] + outputS[i+1][j][k] + outputS[i][j-1][k] + outputS[i][j+1][k] + outputS[i][j][k-1] + outputS[i][j][k+1] - h * h * inputS[i][j][k] )/6
     
     return outputS
-
-def jacobiPoissonSolve(inputS, N, precision):
-    limit = 1500
-    h = 1.0 / N    
-    cnt = 0
-    maxdiff = 0
-    firstdiff = 0
-    converged = False
-    
-    print(' | sep-Jacobi', end="")
-    outputS  = complexZeros(N,3)    
-    poutputS = complexZeros(N,3)    
-    
-    while not converged:
-        if cnt>=limit:
-            print(' | Iter limit reached', end="")
-            break
-        for i in range (0,N):
-            for j in range (0,N):
-                for k in range (0,N):
-                    prevI = 0 if i==0   else poutputS[i-1][j][k]
-                    pastI = 0 if i==N-1 else poutputS[i+1][j][k]
-                    prevJ = 0 if j==0   else poutputS[i][j-1][k]
-                    pastJ = 0 if j==N-1 else poutputS[i][j+1][k]
-                    prevK = 0 if k==0   else poutputS[i][j][k-1]
-                    pastK = 0 if k==N-1 else poutputS[i][j][k+1]
-                    outputS[i][j][k] = (prevI + pastI + prevJ + pastJ + prevK + pastK - h * h * inputS[i][j][k] )/6
-        
-        diff = outputS - poutputS
-        maxdiff = np.max(np.abs(diff))
-        if cnt == 0:
-            print(' | First diff: ', firstdiff, end="")
-        if maxdiff <= precision:
-            converged = True
-        poutputS, outputS = outputS, poutputS
-        cnt += 1
-    print(' | Last diff: ', maxdiff, end="")
-    print(' | Iter num: ', cnt, end="")
-    return outputS
    
 def gsPoissonSolve(inputS, N, precision):
     limit = 1500

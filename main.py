@@ -14,12 +14,12 @@ import time
 
 def main(argv):
     n = 1
-    N = 32
+    N = 16
     idi = POINT_ID
     idml = [MTG_ID] 
     ido = PLOT_ID
     scale = -10
-    precision = 0.005
+    precision = 1e-10
     try:
         opts, args = getopt.getopt(argv,"hn:N:s:p:",["precision=", "ido=", "idi=", "idm=", "help", "scale=", "plnum="])
     except getopt.GetoptError:

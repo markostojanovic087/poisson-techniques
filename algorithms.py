@@ -5,8 +5,8 @@ Created on Sat Oct 22 02:03:59 2016
 @author: Marko
 """
 import numpy as np
+import sys
 from constants import *
-from separated import jacobiPoissonSolve
 from separated import gsPoissonSolve
 from separated import sorPoissonSolve
 from separated import multigridPoissonSolve
@@ -15,8 +15,6 @@ def poissonSolve(inputSpace, idm, N, precision):
     if idm == FFT_ID:
         return fftPoissonSolve(inputSpace, N)
     elif idm == JCB_ID:
-        return iterativePoissonSolve(inputSpace, N, False, False, precision)
-    elif idm == SEP_JCB_ID:
         return jacobiPoissonSolve(inputSpace, N, precision)
     elif idm == GS_ID:
         return iterativePoissonSolve(inputSpace, N, True, False, precision)
@@ -34,6 +32,62 @@ def poissonSolve(inputSpace, idm, N, precision):
         return mul2(inputSpace)
     else:
         return inputSpace
+
+def initA(dim):
+    No = dim ** 3
+    A = np.zeros((No,)*2)
+    for i in range(0,No):
+        ci = i  // dim**2
+        cj = (i - ci * dim**2) // dim
+        ck = i  %  dim
+        curr = (ci * dim + cj) * dim +ck
+        A[i][curr] = 6
+        
+        v = ck - 1
+        if v>=0:       
+            curr = (ci * dim + cj) * dim + v
+            A[i][curr] = -1 
+    
+        v = ck + 1
+        if v<dim:       
+            curr = (ci * dim + cj) * dim + v
+            A[i][curr] = -1 
+            
+        v = cj - 1
+        if v>=0:       
+            curr = (ci * dim + v) * dim + ck
+            A[i][curr] = -1
+        
+        v = cj + 1
+        if v<dim:
+            curr = (ci * dim + v) * dim + ck
+            A[i][curr] = -1
+        
+        v = ci - 1
+        if v>=0:       
+            curr = (v * dim + cj) * dim + ck
+            A[i][curr] = -1
+        
+        v = ci + 1
+        if v<dim:       
+            curr = (v * dim + cj) * dim + ck
+            A[i][curr] = -1
+            
+    return A
+
+def calculateError(A, x, b):
+    error = np.dot(A, x) - b
+    Signal = np.sum(x ** 2)
+    Noise = np.sum(error ** 2)
+    SNR = (10 * np.log10(Signal / Noise))  
+    maxerr = np.max(np.abs(error))
+    minerr = np.min(np.abs(error))
+    avgerr = np.average(np.abs(error))
+
+    print(" | SNR: ", SNR, (' Test Passed' if SNR>69.0 else ' Test Failed'), end="")    
+    print(' | Max error: ', maxerr, end="")
+    print(' | Min error: ', minerr, end="")
+    print(' | Average error: ', avgerr, end="")
 
 def multigridOldPoissonSolve(inputSpace, Np, precision): #Discards imaginary part of input
     print(' | Multigrid', end="")
@@ -105,52 +159,36 @@ def fftPoissonSolve(inputSpace, N):
     #print('OUTPUT= ', outputSpace)
     return outputSpace
     
-def iterativePoissonSolve(inputSpace, N, gs, sor, precision):
-    print(' |',(('SOR Gauss-Seidel' if sor else 'Gauss-Seidel') if gs else ('SOR Jacobi' if sor else 'Jacobi')), end="")
-    w = 1
-    if sor:
-        w = 2.0 / (1 + np.pi / N)    
-        print(' | w: ',w, end="")
-    h = 1.0 / N
-    real = np.zeros((N,)*3)
-    imag = np.zeros((N,)*3)
-    outputSpace = real + 1j * imag    
-    converged = False
-    prevOutputSpace = np.copy(outputSpace)
-    cnt = 0
-    limit = 1500
-    maxdiff = 0
-    firstdiff = 0
-    while not converged:
-        if cnt>=limit:
-            print(' | Iter limit reached', end="")
+def jacobiPoissonSolve(f, dim, precision):
+    print(' | Jacobi', end="")
+    sys.stdout.flush()
+
+    iter_limit = 1000
+    N = dim ** 3
+    h = 1.0/dim   
+    f = f.reshape((N))    
+    A = initA(dim)
+    b = - h**2 * f
+    
+    x = np.zeros_like(b)
+    for it_count in range(iter_limit):
+        x_new = np.zeros_like(x)
+    
+        for i in range(A.shape[0]):
+            s1 = np.dot(A[i, :i], x[:i])
+            s2 = np.dot(A[i, i + 1:], x[i + 1:])
+            x_new[i] = (b[i] - s1 - s2) / A[i, i]
+    
+        if np.allclose(x, x_new, atol=precision):
             break
-        for i in range (0,N):
-            for j in range (0,N):
-                for k in range (0,N):
-                    curr = prevOutputSpace[i][j][k]
-                    prevI = 0 if i==0   else (outputSpace if gs else prevOutputSpace)[i-1][j][k]
-                    pastI = 0 if i==N-1 else prevOutputSpace[i+1][j][k]
-                    prevJ = 0 if j==0   else (outputSpace if gs else prevOutputSpace)[i][j-1][k]
-                    pastJ = 0 if j==N-1 else prevOutputSpace[i][j+1][k]
-                    prevK = 0 if k==0   else (outputSpace if gs else prevOutputSpace)[i][j][k-1]
-                    pastK = 0 if k==N-1 else prevOutputSpace[i][j][k+1]
-                    fsor = ((1-w)*curr) if sor else 0
-                    outputSpace[i][j][k] = fsor + w*(prevI + pastI + prevJ + pastJ + prevK + pastK - h * h * inputSpace[i][j][k] )/6
-        diff = outputSpace - prevOutputSpace
-        maxdiff = np.max(np.abs(diff))
-        if cnt == 0:
-            firstdiff = maxdiff
-            print(' | First diff: ', firstdiff, end="")
-        if maxdiff <= precision * firstdiff:
-            converged = True
-        temp = prevOutputSpace
-        prevOutputSpace = outputSpace
-        outputSpace = temp
-        cnt += 1
-    print(' | Last diff: ', maxdiff, end="")
-    print(' | Iter num: ', cnt, end="")
-    return outputSpace
+    
+        x = x_new
+    
+    print(' | Iterations: ', it_count, end="")
+    
+    calculateError(A, x, b)
+
+    return x.reshape((dim, dim, dim)).transpose()    
     
 def interpolate(processLater, outputSpace, N):
     for p in range(0,len(processLater)):

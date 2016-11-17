@@ -20,11 +20,9 @@ def generateInput(idi, N, scale):
     elif idi == POINT_ID:
         print(' | Point', end="")
         h = 1.0 / N
-        real = np.zeros((N,)*3)
-        imag = np.zeros((N,)*3)
+        inputSpace = np.zeros((N,)*3)
         mid = np.int(np.floor(N/2))
-        real[mid][mid][mid] = scale / (h ** 3)
-        inputSpace = real + 1j * imag
+        inputSpace[mid][mid][mid] = scale / (h ** 3)
     elif idi == STICK_ID:
         print(' | Stick', end="")
         h = 1.0 / N
