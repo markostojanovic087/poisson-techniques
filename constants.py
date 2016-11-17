@@ -17,8 +17,6 @@ JCB_ID      = "jcb"     #Jacobi
 GS_ID       = "gs"      #Gauss-Seidel
 SOR_ID      = "sor"     #Successive over relaxation
 MTG_ID      = "mtg"     #Multigrid
-PASS_ID     = "pass"
-MUL2_ID     = "mul2"
 
 #Output generating method ids
 PLOT_ID     = "plot" #Plotting the image

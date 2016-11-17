@@ -20,10 +20,6 @@ def poissonSolve(inputSpace, idm, N, precision):
         return sorPoissonSolve(inputSpace, N, precision)
     elif idm == MTG_ID:
         return multigridPoissonSolve(inputSpace, N)
-    elif idm == PASS_ID:
-        return passtrough(inputSpace)
-    elif idm == MUL2_ID:
-        return mul2(inputSpace)
     else:
         return inputSpace
 
@@ -265,9 +261,3 @@ def interpolate(processLater, outputSpace, N):
                         csum += outputSpace[n][m][l]
                         
         outputSpace[i][j][k] = csum / cnt
-
-def passtrough(inputspace):
-    return np.array(inputspace)
-    
-def mul2(inputspace):
-    return inputspace*0.25
