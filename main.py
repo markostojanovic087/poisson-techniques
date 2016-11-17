@@ -17,7 +17,7 @@ def main(argv):
     N = 32
     idi = POINT_ID
     idml = [MTG_ID] 
-    ido = ABSERRN_ID
+    ido = PLOT_ID
     scale = -10
     precision = 0.005
     try:

@@ -25,9 +25,6 @@ MUL2_ID     = "mul2"
 
 #Output generating method ids
 PLOT_ID     = "plot" #Plotting the image
-CHCK_ID     = "chck" #Compares all succesive outputs - SNR
-RELERR_ID   = "rerr" #Compares all succesive outputs - Relative error
-ABSERRN_ID  = "aerr"
 
 #Compute every combination
 ALL_ID      = "all"
