@@ -7,7 +7,6 @@ Created on Sat Oct 22 02:03:59 2016
 import numpy as np
 import sys
 from constants import *
-from separated import gsPoissonSolve
 from separated import sorPoissonSolve
 from separated import multigridPoissonSolve
 
@@ -17,8 +16,6 @@ def poissonSolve(inputSpace, idm, N, precision):
     elif idm == JCB_ID:
         return jacobiPoissonSolve(inputSpace, N, precision)
     elif idm == GS_ID:
-        return iterativePoissonSolve(inputSpace, N, True, False, precision)
-    elif idm == SEP_GS_ID:
         return gsPoissonSolve(inputSpace, N, precision)
     elif idm == SOR_ID:
         return iterativePoissonSolve(inputSpace, N, True, True, precision)
@@ -189,7 +186,38 @@ def jacobiPoissonSolve(f, dim, precision):
     calculateError(A, x, b)
 
     return x.reshape((dim, dim, dim)).transpose()    
+
+def gsPoissonSolve(f, dim, precision):
+    print(' | Gauss-Seidel', end="")
+    sys.stdout.flush()
+
+    iter_limit = 1000
+    N = dim ** 3
+    h = 1.0/dim   
+    f = f.reshape((N))    
+    A = initA(dim)
+    b = - h**2 * f
     
+    x = np.zeros_like(b)
+    for it_count in range(iter_limit):
+        x_new = np.zeros_like(x)
+    
+        for i in range(A.shape[0]):
+            s1 = np.dot(A[i, :i], x_new[:i])
+            s2 = np.dot(A[i, i + 1:], x[i + 1:])
+            x_new[i] = (b[i] - s1 - s2) / A[i, i]
+    
+        if np.allclose(x, x_new, atol=precision):
+            break
+    
+        x = x_new
+    
+    print(' | Iterations: ', it_count, end="")
+    
+    calculateError(A, x, b)
+
+    return x.reshape((dim, dim, dim)).transpose() 
+  
 def interpolate(processLater, outputSpace, N):
     for p in range(0,len(processLater)):
         elem = processLater[p]
