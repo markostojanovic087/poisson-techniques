@@ -16,7 +16,6 @@ FFT_ID      = "fft"     #Fast Fourier transformation
 JCB_ID      = "jcb"     #Jacobi
 GS_ID       = "gs"      #Gauss-Seidel
 SOR_ID      = "sor"     #Successive over relaxation
-SEP_SOR_ID  = "ssor"    #Successive over relaxation
 MTG_ID      = "mtg"     #Multigrid
 PASS_ID     = "pass"
 MUL2_ID     = "mul2"

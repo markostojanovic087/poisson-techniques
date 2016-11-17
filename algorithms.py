@@ -7,7 +7,6 @@ Created on Sat Oct 22 02:03:59 2016
 import numpy as np
 import sys
 from constants import *
-from separated import sorPoissonSolve
 from separated import multigridPoissonSolve
 
 def poissonSolve(inputSpace, idm, N, precision):
@@ -18,8 +17,6 @@ def poissonSolve(inputSpace, idm, N, precision):
     elif idm == GS_ID:
         return gsPoissonSolve(inputSpace, N, precision)
     elif idm == SOR_ID:
-        return iterativePoissonSolve(inputSpace, N, True, True, precision)
-    elif idm == SEP_SOR_ID:
         return sorPoissonSolve(inputSpace, N, precision)
     elif idm == MTG_ID:
         return multigridPoissonSolve(inputSpace, N)
@@ -206,6 +203,38 @@ def gsPoissonSolve(f, dim, precision):
             s1 = np.dot(A[i, :i], x_new[:i])
             s2 = np.dot(A[i, i + 1:], x[i + 1:])
             x_new[i] = (b[i] - s1 - s2) / A[i, i]
+    
+        if np.allclose(x, x_new, atol=precision):
+            break
+    
+        x = x_new
+    
+    print(' | Iterations: ', it_count, end="")
+    
+    calculateError(A, x, b)
+
+    return x.reshape((dim, dim, dim)).transpose() 
+
+def sorPoissonSolve(f, dim, precision):
+    print(' | SOR', end="")
+    sys.stdout.flush()
+
+    iter_limit = 1000
+    N = dim ** 3
+    h = 1.0/dim
+    w = 2.0 / (1 + np.pi / dim)   
+    f = f.reshape((N))    
+    A = initA(dim)
+    b = - h**2 * f
+    
+    x = np.zeros_like(b)
+    for it_count in range(iter_limit):
+        x_new = np.zeros_like(x)
+    
+        for i in range(A.shape[0]):
+            s1 = np.dot(A[i, :i], x_new[:i])
+            s2 = np.dot(A[i, i + 1:], x[i + 1:])
+            x_new[i] = (1 - w) * x[i] + w * (b[i] - s1 - s2) / A[i, i]
     
         if np.allclose(x, x_new, atol=precision):
             break
