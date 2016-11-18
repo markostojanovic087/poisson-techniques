@@ -15,10 +15,11 @@ import time
 def main(argv):
     n = 1
     N = 16
-    idi = POINT_ID
+    idi = PTPER_ID
     idml = [MTG_ID] 
     ido = PLOT_ID
     scale = -10
+    plnum = -1
     precision = 1e-10
     try:
         opts, args = getopt.getopt(argv,"hn:N:s:p:",["precision=", "ido=", "idi=", "idm=", "help", "scale=", "plnum="])
@@ -45,8 +46,8 @@ def main(argv):
            plnum = np.int(arg)
        elif opt in ("-s","--scale"):
            scale = np.int(arg)
-
-    plnum = N/2       
+    if plnum == -1:
+        plnum = int(N/2)
     cumulativeTime = 0
 
     if ALL_ID in idml:
@@ -56,7 +57,7 @@ def main(argv):
      
     for idm in idml:
         for i in range(0,n): 
-            name = np.str(i+1) + '_' + np.str(N) + '_' + idi + '_' + idm + '_' + np.str(precision)
+            name = np.str(i+1) + '_' + np.str(N) + '_' + idi + '_' + idm + '_' + np.str(precision) + '_pn' + np.str(plnum)
             print("{:9}".format(i+1), '/', n, ' | ',N,'x',N,'x',N, end="")
             inputSpace = generateInput(idi, N, scale)
             startTime = time.time()
@@ -64,8 +65,9 @@ def main(argv):
             endTime = time.time()
             executionTime = endTime - startTime
             print(" | ", "{:10.15f}".format(executionTime), end="")
+            sys.stdout.flush()
             cumulativeTime = cumulativeTime + executionTime  
-            generateOutput(outputSpace, precision, N, ido, plnum, name)
+            generateOutput(inputSpace, outputSpace, precision, N, ido, plnum, name)
 
     print("Total execution time: %s seconds" % (cumulativeTime))
     averageTime = cumulativeTime / n

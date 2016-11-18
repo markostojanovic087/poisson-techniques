@@ -7,11 +7,11 @@ Created on Sat Oct 22 02:03:59 2016
 import numpy as np
 import sys
 from constants import *
-from separated import multigridPoissonSolve
+from scipy.sparse import lil_matrix
 
 def poissonSolve(inputSpace, idm, N, precision):
     if idm == FFT_ID:
-        return fftPoissonSolve(inputSpace, N)
+        return fftPoissonSolve(inputSpace, N, precision)
     elif idm == JCB_ID:
         return jacobiPoissonSolve(inputSpace, N, precision)
     elif idm == GS_ID:
@@ -19,54 +19,54 @@ def poissonSolve(inputSpace, idm, N, precision):
     elif idm == SOR_ID:
         return sorPoissonSolve(inputSpace, N, precision)
     elif idm == MTG_ID:
-        return multigridPoissonSolve(inputSpace, N)
+        return multigridPoissonSolve(inputSpace, N, precision)
     else:
         return inputSpace
 
 def initA(dim):
     No = dim ** 3
-    A = np.zeros((No,)*2)
+    A = lil_matrix((No,No))
     for i in range(0,No):
         ci = i  // dim**2
         cj = (i - ci * dim**2) // dim
         ck = i  %  dim
         curr = (ci * dim + cj) * dim +ck
-        A[i][curr] = 6
+        A[i,curr] = 6
         
         v = ck - 1
         if v>=0:       
             curr = (ci * dim + cj) * dim + v
-            A[i][curr] = -1 
+            A[i,curr] = -1 
     
         v = ck + 1
         if v<dim:       
             curr = (ci * dim + cj) * dim + v
-            A[i][curr] = -1 
+            A[i,curr] = -1 
             
         v = cj - 1
         if v>=0:       
             curr = (ci * dim + v) * dim + ck
-            A[i][curr] = -1
+            A[i,curr] = -1
         
         v = cj + 1
         if v<dim:
             curr = (ci * dim + v) * dim + ck
-            A[i][curr] = -1
+            A[i,curr] = -1
         
         v = ci - 1
         if v>=0:       
             curr = (v * dim + cj) * dim + ck
-            A[i][curr] = -1
+            A[i,curr] = -1
         
         v = ci + 1
         if v<dim:       
             curr = (v * dim + cj) * dim + ck
-            A[i][curr] = -1
+            A[i,curr] = -1
             
     return A
 
 def calculateError(A, x, b):
-    error = np.dot(A, x) - b
+    error = A.dot(x) - b
     Signal = np.sum(x ** 2)
     Noise = np.sum(error ** 2)
     SNR = (10 * np.log10(Signal / Noise))  
@@ -77,48 +77,60 @@ def calculateError(A, x, b):
     print(" | SNR: ", SNR, (' Test Passed' if SNR>69.0 else ' Test Failed'), end="")    
     print(' | Max error: ', maxerr, end="")
     print(' | Min error: ', minerr, end="")
-    print(' | Average error: ', avgerr, end="")
+    print(' | Average error: ', avgerr, end="")    
+    return error
 
-def multigridOldPoissonSolve(inputSpace, Np, precision): #Discards imaginary part of input
-    print(' | Multigrid', end="")
-    N = 2
-    a = 1./N
-    phi, phi2 = np.zeros([N+1,N+1,N+1],float), np.zeros([N+1,N+1,N+1],float)
-    
-    while (a >= 1./Np): #1024
-        delt = 1
-        first = True
-        condition = True
-        while (condition):
-            phi2[:,:,0],phi2[:,:,N] = phi[:,:,0],phi[:,:,N]
-            phi2[:,0,:],phi2[:,N,:] = phi[:,0,:],phi[:,N,:]
-            phi2[0,:,:],phi2[N,:,:] = phi[0,:,:],phi[N,:,:]
-        
-            for i in range(1,N):
-                for j in range(1,N):
-                    for k in range(1,N):
-                        phi2[i,j,k] = (phi[i+1,j,k] + phi[i-1,j,k] + phi[i,j+1,k] + phi[i,j-1,k] + phi[i,j,k+1] + phi[i,j,k-1] - a**2*inputSpace[i,j,k].real)/6         
-                
-                delt = np.amax(abs(phi-phi2))
+def dst(x,axis=-1):
+    """Discrete Sine Transform (DST-I)
 
-            if first:
-                first = False
-                firstDiff = delt
-            
-            condition = delt > precision * firstDiff
-            phi,phi2 = phi2,phi
+    Implemented using 2(N+1)-point FFT
+    xsym = r_[0,x,0,-x[::-1]]
+    DST = (-imag(fft(xsym))/2)[1:(N+1)]
 
-        a /= 2; N *= 2
-        phi2, phi3 = np.zeros([N+1,N+1,N+1],float), np.zeros([N+1,N+1,N+1],float)
-        phi,phi3 = phi3,phi
-    
-    return phi3
-    
+    adjusted to work over an arbitrary axis for entire n-dim array
+    """
+    n = len(x.shape)
+    N = x.shape[axis]
+    slices = [None]*3
+    for k in range(3):
+        slices[k] = []
+        for j in range(n):
+            slices[k].append(slice(None))
+    newshape = list(x.shape)
+    newshape[axis] = 2*(N+1)
+    xsym = np.zeros(newshape,np.float)
+    slices[0][axis] = slice(1,N+1)
+    slices[1][axis] = slice(N+2,None)
+    slices[2][axis] = slice(None,None,-1)
+    for k in range(3):
+        slices[k] = tuple(slices[k])
+    xsym[slices[0]] = x
+    xsym[slices[1]] = -x[slices[2]]
+    DST = np.fft.fft(xsym,axis=axis)
+    #print xtilde
+    return (-(DST.imag)/2)[slices[0]]
 
-def fftPoissonSolve(inputSpace, N):
+def dst3(x,axes=(-1,-2,-3)):
+    return dst(dst(dst(x,axis=axes[0]),axis=axes[1]),axis=axes[2])
+
+def idst3(x,axes=(-1,-2,-3)):
+    n = x.shape[0]
+    u = dst(dst(dst(x,axis=axes[0]),axis=axes[1]),axis=axes[2])
+    u= u * (2/(n+1))**2			#normalize ,change for rectangular domain
+    return u
+
+def fftPoissonSolve(inputSpace, N, precision):    
     print(' | FFT', end="")
+    sys.stdout.flush()
+
+    imag = np.zeros((N,)*3)
+    inputSpace = inputSpace + 1j * imag
+    
     #print('INPUT= ', inputSpace[][][])
+    #outputSpace = inputSpace
     outputSpace = np.fft.fftn(inputSpace)
+    #outputSpace = dst3(inputSpace)
+    #print(outputSpace.shape)
     #print('FFT= ', outputSpace)
     h = 1.0 / N    
     w = np.exp(2 * np.pi * 1j / N)
@@ -126,7 +138,7 @@ def fftPoissonSolve(inputSpace, N):
     wj = 1.0
     wk = 1.0      
 
-    processLater = []    
+    #processLater = []    
     
     for i in range(0,N):
         for j in range(0,N):
@@ -137,112 +149,189 @@ def fftPoissonSolve(inputSpace, N):
                     #if outputSpace[i][j][k].real < 0:
                         #print('** [',i,'][',j,'][',k,']')
                 else:
+                    outputSpace[i][j][k] = 0
                     #print('[',i,'][',j,'][',k,']')
-                    processLater.append([i,j,k]) 
+                    #processLater.append([i,j,k]) 
                 wk = wk * w
             wj = wj * w
         wi = wi * w                
 
-    interpolate(processLater, outputSpace, N)    
+    #interpolate(processLater, outputSpace, N)    
     #print('POISS= ', outputSpace)
-    outputSpace = np.fft.ifftn(outputSpace)
+    outputSpace =  np.fft.ifftn(outputSpace)
+    #outputSpace =  idst3(outputSpace)
     #print('OUTPUT= ', outputSpace)
-    return outputSpace
     
-def jacobiPoissonSolve(f, dim, precision):
+    return outputSpace.real
+    
+def jacobiPoissonSolve(f, N, precision):
     print(' | Jacobi', end="")
     sys.stdout.flush()
 
     iter_limit = 1000
-    N = dim ** 3
-    h = 1.0/dim   
-    f = f.reshape((N))    
-    A = initA(dim)
-    b = - h**2 * f
+    h = 1.0/N   
     
-    x = np.zeros_like(b)
+    x  = np.zeros((N,)*3)    
+    it_count = 0
     for it_count in range(iter_limit):
         x_new = np.zeros_like(x)
-    
-        for i in range(A.shape[0]):
-            s1 = np.dot(A[i, :i], x[:i])
-            s2 = np.dot(A[i, i + 1:], x[i + 1:])
-            x_new[i] = (b[i] - s1 - s2) / A[i, i]
-    
+        
+        for i in range (0,N):
+            for j in range (0,N):
+                for k in range (0,N):
+                    prevI = 0 if i==0   else x[i-1][j][k]
+                    pastI = 0 if i==N-1 else x[i+1][j][k]
+                    prevJ = 0 if j==0   else x[i][j-1][k]
+                    pastJ = 0 if j==N-1 else x[i][j+1][k]
+                    prevK = 0 if k==0   else x[i][j][k-1]
+                    pastK = 0 if k==N-1 else x[i][j][k+1]
+                    x_new[i][j][k] = (prevI + pastI + prevJ + pastJ + prevK + pastK - h * h * f[i][j][k] )/6
+         
         if np.allclose(x, x_new, atol=precision):
             break
-    
         x = x_new
-    
+        
     print(' | Iterations: ', it_count, end="")
-    
-    calculateError(A, x, b)
+    return x  
 
-    return x.reshape((dim, dim, dim)).transpose()    
-
-def gsPoissonSolve(f, dim, precision):
+def gsPoissonSolve(f, N, precision):
     print(' | Gauss-Seidel', end="")
     sys.stdout.flush()
 
     iter_limit = 1000
-    N = dim ** 3
-    h = 1.0/dim   
-    f = f.reshape((N))    
-    A = initA(dim)
-    b = - h**2 * f
+    h = 1.0/N   
     
-    x = np.zeros_like(b)
+    x  = np.zeros((N,)*3)    
+    it_count = 0
     for it_count in range(iter_limit):
         x_new = np.zeros_like(x)
-    
-        for i in range(A.shape[0]):
-            s1 = np.dot(A[i, :i], x_new[:i])
-            s2 = np.dot(A[i, i + 1:], x[i + 1:])
-            x_new[i] = (b[i] - s1 - s2) / A[i, i]
-    
+        
+        for i in range (0,N):
+            for j in range (0,N):
+                for k in range (0,N):
+                    prevI = 0 if i==0   else x_new[i-1][j][k]
+                    pastI = 0 if i==N-1 else x[i+1][j][k]
+                    prevJ = 0 if j==0   else x_new[i][j-1][k]
+                    pastJ = 0 if j==N-1 else x[i][j+1][k]
+                    prevK = 0 if k==0   else x_new[i][j][k-1]
+                    pastK = 0 if k==N-1 else x[i][j][k+1]
+                    x_new[i][j][k] = (prevI + pastI + prevJ + pastJ + prevK + pastK - h * h * f[i][j][k] )/6
+         
         if np.allclose(x, x_new, atol=precision):
             break
-    
         x = x_new
-    
+        
     print(' | Iterations: ', it_count, end="")
-    
-    calculateError(A, x, b)
+    return x
 
-    return x.reshape((dim, dim, dim)).transpose() 
-
-def sorPoissonSolve(f, dim, precision):
+def sorPoissonSolve(f, N, precision):
     print(' | SOR', end="")
     sys.stdout.flush()
 
     iter_limit = 1000
-    N = dim ** 3
-    h = 1.0/dim
-    w = 2.0 / (1 + np.pi / dim)   
-    f = f.reshape((N))    
+    h = 1.0/N
+    w = 2.0 / (1 + np.pi / N)      
+    
+    x  = np.zeros((N,)*3)    
+    it_count = 0
+    for it_count in range(iter_limit):
+        x_new = np.zeros_like(x)
+        
+        for i in range (0,N):
+            for j in range (0,N):
+                for k in range (0,N):
+                    curr = x[i][j][k]
+                    prevI = 0 if i==0   else x_new[i-1][j][k]
+                    pastI = 0 if i==N-1 else x[i+1][j][k]
+                    prevJ = 0 if j==0   else x_new[i][j-1][k]
+                    pastJ = 0 if j==N-1 else x[i][j+1][k]
+                    prevK = 0 if k==0   else x_new[i][j][k-1]
+                    pastK = 0 if k==N-1 else x[i][j][k+1]
+                    fsor = ((1-w)*curr)
+                    x_new[i][j][k] = fsor + w*(prevI + pastI + prevJ + pastJ + prevK + pastK - h * h * f[i][j][k] )/6
+         
+        if np.allclose(x, x_new, atol=precision):
+            break
+        x = x_new
+        
+    print(' | Iterations: ', it_count, end="")
+    return x
+
+def multigridPoissonSolve(f, dim, precision):
+    print(' | Multigrid', end="")
+    sys.stdout.flush()
+    
+    N = dim**3
+    h = 1.0 / dim
+    f = f.reshape((N))
     A = initA(dim)
     b = - h**2 * f
     
-    x = np.zeros_like(b)
-    for it_count in range(iter_limit):
-        x_new = np.zeros_like(x)
-    
-        for i in range(A.shape[0]):
-            s1 = np.dot(A[i, :i], x_new[:i])
-            s2 = np.dot(A[i, i + 1:], x[i + 1:])
-            x_new[i] = (1 - w) * x[i] + w * (b[i] - s1 - s2) / A[i, i]
-    
-        if np.allclose(x, x_new, atol=precision):
+    x = np.zeros(N) # initial guess
+    for it_count in range(100):
+        r = b - np.dot(A,x)
+        if np.linalg.norm(r)/np.linalg.norm(b) < 1.e-10:
             break
-    
-        x = x_new
+        du = vcycle(A, r)
+        x += du
     
     print(' | Iterations: ', it_count, end="")
     
     calculateError(A, x, b)
 
-    return x.reshape((dim, dim, dim)).transpose() 
-  
+    return x.reshape((dim, dim, dim))
+
+def vcycle(A,f):
+    # perform one v-cycle on the matrix A
+    sizeF = np.size(A,axis=0);
+
+    # size for direct inversion < 15
+    if sizeF == 1:
+        v = np.linalg.solve(A,f)        
+        return v    
+    
+    # N1=number of Gauss-Seidel iterations before coarsening
+    N1 = 5;
+    v = np.zeros(sizeF);
+    for numGS in range(N1):
+        for k in range(sizeF):
+            s1 = np.dot(A[k, :k], v[:k])
+            s2 = np.dot(A[k, k + 1:], v[k + 1:])
+            v[k] = (f[k] - s1 - s2) / A[k,k];
+            
+    # construct interpolation operator from next coarser to this mesh
+    # next coarser has (n/2) points
+    sizeC = (int)(sizeF/2)
+    P = np.zeros((sizeF,sizeC));
+    for k in range(sizeC):
+        P[2*k,k] = 1; # copy these points
+    for k in range(sizeC-1):
+        P[2*k+1,k] = .5; # average these points
+        P[2*k+1,k+1] = .5;
+    
+    # compute residual
+    residual = f - np.dot(A,v)
+    
+    # project residual onto coarser mesh
+    residC = np.dot(P.transpose(),residual)
+    
+    # Find coarser matrix (sizeC X sizeC)
+    AC = np.dot(P.transpose(),np.dot(A,P))
+    vC = vcycle(AC,residC);
+
+    # extend to this mesh
+    v = np.dot(P,vC)
+
+    # N2=number of Gauss-Seidel iterations after coarsening
+    N2 = 5;
+    for numGS in range(N2):
+        for k in range(sizeF):
+            s1 = np.dot(A[k, :k], v[:k])
+            s2 = np.dot(A[k, k + 1:], v[k + 1:])
+            v[k] = (f[k] - s1 - s2 ) / A[k,k];
+        
+    return v
+ 
 def interpolate(processLater, outputSpace, N):
     for p in range(0,len(processLater)):
         elem = processLater[p]
