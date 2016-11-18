@@ -23,9 +23,13 @@ def poissonSolve(inputSpace, idm, N, precision):
     else:
         return inputSpace
 
-def initA(dim):
+def initA(dim, dense=0):
     No = dim ** 3
-    A = lil_matrix((No,No))
+    if dense == 0:
+        A = lil_matrix((No,No))
+    else:
+        print('Dense')
+        A = np.zeros((No,)*2)
     for i in range(0,No):
         ci = i  // dim**2
         cj = (i - ci * dim**2) // dim
@@ -257,29 +261,27 @@ def sorPoissonSolve(f, N, precision):
     print(' | Iterations: ', it_count, end="")
     return x
 
-def multigridPoissonSolve(f, dim, precision):
+def multigridPoissonSolve(f, N, precision):
     print(' | Multigrid', end="")
     sys.stdout.flush()
     
-    N = dim**3
-    h = 1.0 / dim
-    f = f.reshape((N))
-    A = initA(dim)
+    h = 1.0 / N
+    
+    f = f.reshape((N**3))
+    A = initA(N,1)
     b = - h**2 * f
     
-    x = np.zeros(N) # initial guess
+    x = np.zeros(N**3) # initial guess
     for it_count in range(100):
         r = b - np.dot(A,x)
         if np.linalg.norm(r)/np.linalg.norm(b) < 1.e-10:
             break
-        du = vcycle(A, r)
+        du = vcycle(A,r)
         x += du
     
     print(' | Iterations: ', it_count, end="")
-    
-    calculateError(A, x, b)
 
-    return x.reshape((dim, dim, dim))
+    return x.reshape((N, N, N))
 
 def vcycle(A,f):
     # perform one v-cycle on the matrix A
@@ -316,7 +318,7 @@ def vcycle(A,f):
     residC = np.dot(P.transpose(),residual)
     
     # Find coarser matrix (sizeC X sizeC)
-    AC = np.dot(P.transpose(),np.dot(A,P))
+    AC = np.dot(P.transpose(),np.dot(A, P))
     vC = vcycle(AC,residC);
 
     # extend to this mesh
@@ -328,7 +330,7 @@ def vcycle(A,f):
         for k in range(sizeF):
             s1 = np.dot(A[k, :k], v[:k])
             s2 = np.dot(A[k, k + 1:], v[k + 1:])
-            v[k] = (f[k] - s1 - s2 ) / A[k,k];
+            v[k] = (f[k] - s1 - s2) / A[k,k];
         
     return v
  
