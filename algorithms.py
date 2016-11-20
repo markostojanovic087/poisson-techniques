@@ -8,6 +8,7 @@ import numpy as np
 import sys
 from constants import *
 from scipy.sparse import lil_matrix
+from proba_mtg import multigridPoissonSolveA
 
 def poissonSolve(inputSpace, idm, N, precision):
     if idm == FFT_ID:
@@ -19,7 +20,7 @@ def poissonSolve(inputSpace, idm, N, precision):
     elif idm == SOR_ID:
         return sorPoissonSolve(inputSpace, N, precision)
     elif idm == MTG_ID:
-        return multigridPoissonSolve(inputSpace, N, precision)
+        return multigridPoissonSolveA(inputSpace, N, precision)
     else:
         return inputSpace
 
@@ -195,7 +196,7 @@ def jacobiPoissonSolve(f, N, precision):
             break
         x = x_new
         
-    print(' | Iterations: ', it_count, end="")
+    print(' | Iterations: ', it_count+1, end="")
     return x  
 
 def gsPoissonSolve(f, N, precision):
@@ -225,7 +226,7 @@ def gsPoissonSolve(f, N, precision):
             break
         x = x_new
         
-    print(' | Iterations: ', it_count, end="")
+    print(' | Iterations: ', it_count+1, end="")
     return x
 
 def sorPoissonSolve(f, N, precision):
@@ -258,7 +259,7 @@ def sorPoissonSolve(f, N, precision):
             break
         x = x_new
         
-    print(' | Iterations: ', it_count, end="")
+    print(' | Iterations: ', it_count+1, end="")
     return x
 
 def multigridPoissonSolve(f, N, precision):
@@ -273,17 +274,129 @@ def multigridPoissonSolve(f, N, precision):
     
     x = np.zeros(N**3) # initial guess
     for it_count in range(100):
-        r = b - np.dot(A,x)
-        if np.linalg.norm(r)/np.linalg.norm(b) < 1.e-10:
+        r = b - A.dot(x)
+        diff = np.linalg.norm(r)/np.linalg.norm(b)
+        if diff < precision:
             break
-        du = vcycle(A,r)
+        du = vcycle(A,r,h)
         x += du
-    
-    print(' | Iterations: ', it_count, end="")
+        print ("step %d, rel error=%e"% (it_count+1, diff ))
+    print(' | Iterations: ', it_count+1, end="")
 
     return x.reshape((N, N, N))
 
-def vcycle(A,f):
+def gsIteration(outputS, inputS, sizeF, h):
+    power2 = np.log2(sizeF)
+    case = power2 % 3
+
+    if case != 0:
+        exp = ( power2 + 3 - case ) / 3
+        N = int(pow(2,exp))
+        
+        if case == 1:
+            M = int(N / 2)
+        else:
+            M = int(N)
+        
+        L = int(N / 2)
+    
+    else:
+        exp = power2 / 3
+        N = M = L = int(pow(2,exp))
+           
+    outputS = outputS.reshape((N,M,L))
+    inputS = inputS.reshape((N,M,L))
+    for i in range (0,N):
+        for j in range (0,M):
+            for k in range (0,L):
+                prevI = 0 if i==0   else outputS[i-1][j][k]
+                pastI = 0 if i==N-1 else outputS[i+1][j][k]
+                prevJ = 0 if j==0   else outputS[i][j-1][k]
+                pastJ = 0 if j==M-1 else outputS[i][j+1][k]
+                prevK = 0 if k==0   else outputS[i][j][k-1]
+                pastK = 0 if k==L-1 else outputS[i][j][k+1]
+                outputS[i][j][k] = (prevI + pastI + prevJ + pastJ + prevK + pastK - h * h * inputS[i][j][k] )/6
+    
+    return outputS.reshape((sizeF))
+
+def gs1DIteration(outputS, inputS, sizeF, h, A): #NE VALJA - Cim se zavrsi prvi v-cycle ovo gresi jer ne menja hasdkodovano A (susedi su drugaciji skroz...)
+    power2 = np.log2(sizeF)
+    case = power2 % 3
+
+    va = np.empty_like(outputS)
+    va[:] = outputS
+    
+    if case != 0:
+        exp = ( power2 + 3 - case ) / 3
+        N = int(pow(2,exp))
+        
+        if case == 1:
+            M = int(N / 2)
+        else:
+            M = int(N)
+        
+        L = int(N / 2)
+    else:
+        exp = power2 / 3
+        N = M = L = int(pow(2,exp))
+    
+    #print('sizeF=',sizeF,' N=',N,'   M=',M,'   L=',L)
+    for i in range(0,sizeF):
+        #print('A[',i,'][in]=', np.nonzero(A[i]))
+        #print('A[',i,'][nz]= ',A[i][np.nonzero(A[i])])
+        ci = i  // (M * L)
+        #cj = (i % ( M * L)) // L        
+        cj = (i - ci * M * L) // L
+        ck = i % L
+        
+        #if (L == 8 and M==16):
+         #   print('i=', i,' ci=',ci,'   cj=',cj,'   ck=',ck)
+        #curr = (ci * N + cj) * M +ck
+        
+        v = ck - 1
+        prevK = outputS[((ci * M + cj) * L + v if v>=0 else 0)]
+    
+        v = ck + 1
+        pastK = outputS[((ci * M + cj) * L + v if v<L  else 0)]
+        
+        v = cj - 1
+        prevJ = outputS[((ci * M + v) * L + ck if v>=0 else 0)]
+    
+        v = cj + 1
+        pastJ = outputS[((ci * M + v) * L + ck if v<M  else 0)]
+        
+        v = ci - 1
+        prevI = outputS[((v * M + cj) * L + ck if v>=0 else 0)]
+    
+        v = ci + 1
+        pastI = outputS[((v * M + cj) * L + ck if v<N  else 0)]
+    
+        #outputS[i] = (prevI + pastI + prevJ + pastJ + prevK + pastK - h * h * inputS[i])/6
+        s1a = -prevI - prevJ - prevK
+        s2a = -pastI - pastJ - pastK
+        outputS[i] = (inputS[i] - s1a - s2a)/6
+        print('---- I= ', i,' ------ sizeF= ', sizeF,'-----------')
+        print('s1a = ', s1a)
+        print('s2a = ', s2a)
+        print('outputS = ',outputS[i])
+        
+        s1 = np.dot(A[i, :i], va[:i])
+        s2 = np.dot(A[i, i + 1:], va[i + 1:])
+        print('s1 = ', s1)
+        print('s2 = ', s2)
+        va[i] = (inputS[i] - s1 - s2) / A[i,i];
+
+        print('va = ',va[i])
+    input("Press Enter to continue...")
+    return outputS
+
+#def smooth(v, f, sizeF, h):
+    #for k in range(sizeF):
+     #   s1 = np.dot(A[k, :k], v[:k])
+     #   s2 = np.dot(A[k, k + 1:], v[k + 1:])
+     #   v[k] = (f[k] - s1 - s2) / A[k,k];
+
+def vcycle(A,f,h):
     # perform one v-cycle on the matrix A
     sizeF = np.size(A,axis=0);
 
@@ -296,10 +409,11 @@ def vcycle(A,f):
     N1 = 5;
     v = np.zeros(sizeF);
     for numGS in range(N1):
-        for k in range(sizeF):
-            s1 = np.dot(A[k, :k], v[:k])
-            s2 = np.dot(A[k, k + 1:], v[k + 1:])
-            v[k] = (f[k] - s1 - s2) / A[k,k];
+        gs1DIteration(v, f, sizeF, h, A)
+        #for k in range(sizeF):
+         #   s1 = np.dot(A[k, :k], v[:k])
+          #  s2 = np.dot(A[k, k + 1:], v[k + 1:])
+           # v[k] = (f[k] - s1 - s2) / A[k,k];
             
     # construct interpolation operator from next coarser to this mesh
     # next coarser has (n/2) points
@@ -312,14 +426,14 @@ def vcycle(A,f):
         P[2*k+1,k+1] = .5;
     
     # compute residual
-    residual = f - np.dot(A,v)
+    residual = f - A.dot(v)
     
     # project residual onto coarser mesh
     residC = np.dot(P.transpose(),residual)
     
     # Find coarser matrix (sizeC X sizeC)
-    AC = np.dot(P.transpose(),np.dot(A, P))
-    vC = vcycle(AC,residC);
+    AC = np.dot(P.transpose(),A.dot(P))
+    vC = vcycle(AC,residC,h);
 
     # extend to this mesh
     v = np.dot(P,vC)
@@ -327,10 +441,11 @@ def vcycle(A,f):
     # N2=number of Gauss-Seidel iterations after coarsening
     N2 = 5;
     for numGS in range(N2):
-        for k in range(sizeF):
-            s1 = np.dot(A[k, :k], v[:k])
-            s2 = np.dot(A[k, k + 1:], v[k + 1:])
-            v[k] = (f[k] - s1 - s2) / A[k,k];
+        gs1DIteration(v, f, sizeF, h,A)
+        #for k in range(sizeF):
+         #   s1 = np.dot(A[k, :k], v[:k])
+          #  s2 = np.dot(A[k, k + 1:], v[k + 1:])
+           # v[k] = (f[k] - s1 - s2) / A[k,k];
         
     return v
  

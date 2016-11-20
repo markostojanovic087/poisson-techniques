@@ -12,7 +12,8 @@ PTPER_ID    = "ptper"
 STICK_ID    = "st"
 STPER_ID    = "stper"
 GRIP_ID     = "gr"
-PERIODIC_ID     = "per"
+PERIODIC_ID = "per"
+ZEROS_ID    = "zero"
 
 #Method ids for solving the equation
 FFT_ID      = "fft"     #Fast Fourier transformation

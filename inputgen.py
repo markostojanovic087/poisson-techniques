@@ -62,4 +62,6 @@ def generateInput(idi, N, scale):
             for j in range(0,N):
                 for k in range(0, N):
                     inputSpace[i][j][k] = np.sin(2*np.pi*(i+j+k)/(3*N))
+    elif idi == ZEROS_ID:
+        inputSpace = np.zeros((N,)*3)
     return inputSpace
